@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Cropper &amp; Brightness Adjuster</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      text-align: center;
+    }
+    #canvas {
+      border: 1px solid #ccc;
+      cursor: move;
+      max-width: 90%;
+      margin-top: 10px;
+    }
+    input[type="range"] {
+      width: 200px;
+    }
+    /* The cropped image is hidden by default */
+    #croppedImage {
+      display: none;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      max-width: 90%;
+    }
+  </style>
+</head>
+<body>
+  <h1>Image Cropper &amp; Brightness Adjuster</h1>
+  
+  <input type="file" id="fileInput" accept="image/*">
+  <br><br>
+  
+  <label for="brightness">Brightness:</label>
+  <input type="range" id="brightness" min="50" max="150" value="100">
+  <span id="brightnessValue">100%</span>
+  <br><br>
+  
+  <label for="cropSize">Crop Box Size:</label>
+  <input type="range" id="cropSize" value="100">
+  <span id="cropSizeValue">100px</span>
+  <br><br>
+  
+  <canvas id="canvas"></canvas>
+  <br><br>
+  
+  <button id="cropButton">Crop Image</button>
+  
+  <h2>Cropped Image:</h2>
+  <!-- Text placeholder (no punctuation). This disappears when we show the real cropped image. -->
+  <p id="croppedPlaceholder">Cropped result will appear here</p>
+  <!-- Hidden <img> until a crop is actually done -->
+  <img id="croppedImage">
+  <br><br>
+  
+  <button id="saveButton" style="display:none;">Save As</button>
+  
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const brightnessSlider = document.getElementById("brightness");
+    const brightnessValue = document.getElementById("brightnessValue");
+    const cropSizeSlider = document.getElementById("cropSize");
+    const cropSizeValue = document.getElementById("cropSizeValue");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const cropButton = document.getElementById("cropButton");
+    const croppedImageEl = document.getElementById("croppedImage");
+    const croppedPlaceholder = document.getElementById("croppedPlaceholder");
+    const saveButton = document.getElementById("saveButton");
+    
+    let image = new Image();
+    let brightness = 100;
+    let cropBox = { x: 0, y: 0, size: 100 };
+    let dragging = false;
+    let offsetX, offsetY;
+
+    // Load the image from file input
+    fileInput.addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        image = new Image();
+        image.onload = function() {
+          // Set canvas dimensions to match the image
+          canvas.width = image.width;
+          canvas.height = image.height;
+          // Initialize cropBox as a centered square (half the size of the smallest dimension)
+          const size = Math.floor(Math.min(canvas.width, canvas.height) / 2);
+          cropBox = {
+            x: Math.floor((canvas.width - size) / 2),
+            y: Math.floor((canvas.height - size) / 2),
+            size: size
+          };
+          // Set crop box slider limits based on image dimensions
+          cropSizeSlider.min = 50;
+          cropSizeSlider.max = Math.floor(Math.min(canvas.width, canvas.height));
+          cropSizeSlider.value = size;
+          cropSizeValue.textContent = size + "px";
+          drawCanvas();
+        };
+        image.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Update brightness and redraw the canvas
+    brightnessSlider.addEventListener("input", function(e) {
+      brightness = e.target.value;
+      brightnessValue.textContent = brightness + "%";
+      drawCanvas();
+    });
+
+    // Adjust crop box size while keeping its center position
+    cropSizeSlider.addEventListener("input", function(e) {
+      const newSize = parseInt(e.target.value);
+      // Get the current center of the crop box
+      const centerX = cropBox.x + cropBox.size / 2;
+      const centerY = cropBox.y + cropBox.size / 2;
+      // Update size and recenter the crop box, ensuring it stays within bounds
+      cropBox.size = newSize;
+      cropBox.x = Math.min(Math.max(centerX - newSize / 2, 0), canvas.width - newSize);
+      cropBox.y = Math.min(Math.max(centerY - newSize / 2, 0), canvas.height - newSize);
+      cropSizeValue.textContent = newSize + "px";
+      drawCanvas();
+    });
+
+    // Draw the image on canvas with brightness filter and overlay the crop box
+    function drawCanvas() {
+      if (!image.src) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.filter = "brightness(" + brightness + "%)";
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      // Draw the crop box overlay
+      ctx.filter = "none";
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cropBox.x, cropBox.y, cropBox.size, cropBox.size);
+    }
+
+    // Enable dragging of the crop box
+    canvas.addEventListener("mousedown", function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      if (mouseX >= cropBox.x && mouseX <= cropBox.x + cropBox.size &&
+          mouseY >= cropBox.y && mouseY <= cropBox.y + cropBox.size) {
+        dragging = true;
+        offsetX = mouseX - cropBox.x;
+        offsetY = mouseY - cropBox.y;
+      }
+    });
+
+    canvas.addEventListener("mousemove", function(e) {
+      if (dragging) {
+        const rect = canvas.getBoundingClientRect();
+        let mouseX = e.clientX - rect.left;
+        let mouseY = e.clientY - rect.top;
+        // Update crop box position while ensuring it remains within the canvas
+        cropBox.x = Math.min(Math.max(mouseX - offsetX, 0), canvas.width - cropBox.size);
+        cropBox.y = Math.min(Math.max(mouseY - offsetY, 0), canvas.height - cropBox.size);
+        drawCanvas();
+      }
+    });
+
+    canvas.addEventListener("mouseup", () => dragging = false);
+    canvas.addEventListener("mouseleave", () => dragging = false);
+
+    // Crop the image using the current crop box and brightness filter
+    cropButton.addEventListener("click", function() {
+      if (!image.src) return;
+      const outputCanvas = document.createElement("canvas");
+      outputCanvas.width = cropBox.size;
+      outputCanvas.height = cropBox.size;
+      const outputCtx = outputCanvas.getContext("2d");
+      outputCtx.filter = "brightness(" + brightness + "%)";
+      outputCtx.drawImage(
+        image,
+        cropBox.x,
+        cropBox.y,
+        cropBox.size,
+        cropBox.size,
+        0,
+        0,
+        cropBox.size,
+        cropBox.size
+      );
+      // Convert cropped canvas to Data URL
+      const dataURL = outputCanvas.toDataURL("image/png");
+      
+      // Hide placeholder text, show the cropped image
+      croppedPlaceholder.style.display = "none";
+      croppedImageEl.style.display = "inline-block";
+      croppedImageEl.src = dataURL;
+
+      // Show the "Save As" button after cropping
+      saveButton.style.display = "inline-block";
+    });
+
+    // Save the cropped image file
+    saveButton.addEventListener("click", function() {
+      if (croppedImageEl.src) {
+        const a = document.createElement('a');
+        a.href = croppedImageEl.src;
+        a.download = "cropped_image.png"; // The browser's settings will decide whether to prompt for location
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    });
+  </script>
+</body>
+</html>
